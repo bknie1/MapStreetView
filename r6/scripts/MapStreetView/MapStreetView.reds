@@ -59,6 +59,26 @@ public func MSVRotateLabel() -> String {
   return label;
 }
 
+// Measured on 2.5, in the speed-seconds MSVCamera counts in. The engine
+// won't tilt more than half a speed-second toward the horizon from the
+// top-down preset, and one full turn takes 3.446.
+public func MSVPitchMin() -> Float {
+  return -0.50;
+}
+
+public func MSVPitchMax() -> Float {
+  return 0.00;
+}
+
+public func MSVFullTurn() -> Float {
+  return 3.446;
+}
+
+// The same heading, expressed as close to zero as possible.
+public func MSVWrapYaw(yaw: Float) -> Float {
+  return yaw - MSVFullTurn() * Cast<Float>(RoundF(yaw / MSVFullTurn()));
+}
+
 // Owns every rotation the mod sends to the map camera.
 //
 // Positions are kept in "speed-seconds": full stick for one second moves 1.0.
@@ -172,15 +192,16 @@ public class MSVCamera extends IScriptable {
   // --- View ------------------------------------------------------------------
 
   public final func ResetView() -> Void {
-    this.m_targetYaw = 0.00;
+    // Face north by the shortest way round, not by unwinding every turn.
+    this.m_targetYaw = this.m_yaw - MSVWrapYaw(this.m_yaw);
     this.m_targetPitch = 0.00;
     this.Log("reset view");
     this.Wake();
   }
 
   public final func RestoreView(yaw: Float, pitch: Float) -> Void {
-    this.m_targetYaw = yaw;
-    this.m_targetPitch = pitch;
+    this.m_targetYaw = MSVWrapYaw(yaw);
+    this.m_targetPitch = ClampF(pitch, MSVPitchMin(), MSVPitchMax());
     this.Log("restore view yaw " + FloatToStringPrec(yaw, 3) + " pitch " + FloatToStringPrec(pitch, 3));
     this.Wake();
   }
@@ -327,6 +348,11 @@ public class MSVCamera extends IScriptable {
         this.m_pitch += pitch * dt;
       };
     };
+    // The engine stops tilting at its limits, so stop counting there too.
+    // Otherwise the count runs past what's on screen and every restore
+    // afterwards chases a tilt the camera can't reach.
+    this.m_pitch = ClampF(this.m_pitch, MSVPitchMin(), MSVPitchMax());
+    this.m_targetPitch = ClampF(this.m_targetPitch, MSVPitchMin(), MSVPitchMax());
     this.UpdateSound();
     this.RefreshDebugText();
   }
