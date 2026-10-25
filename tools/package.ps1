@@ -5,6 +5,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
 $root = Split-Path -Parent $PSScriptRoot
 $scripts = Join-Path $root 'r6\scripts\MapStreetView'
 $dist = Join-Path $root 'dist'
@@ -34,9 +35,19 @@ foreach ($name in $variants.Keys) {
   }
   [IO.File]::WriteAllText((Join-Path $target 'MapStreetViewSettings.reds'), $settings, (New-Object Text.UTF8Encoding $false))
 
+  # Compress-Archive on Windows PowerShell writes backslashes into entry
+  # names, which some mod managers misread, so build the zip by hand.
   $zip = Join-Path $dist "MapStreetView-$Version-$name.zip"
   if (Test-Path $zip) { Remove-Item $zip }
-  Compress-Archive -Path (Join-Path $stage 'r6') -DestinationPath $zip
+  $archive = [IO.Compression.ZipFile]::Open($zip, 'Create')
+  try {
+    foreach ($file in Get-ChildItem $stage -Recurse -File) {
+      $entry = $file.FullName.Substring($stage.Length + 1).Replace('\', '/')
+      [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $file.FullName, $entry) | Out-Null
+    }
+  } finally {
+    $archive.Dispose()
+  }
   Remove-Item -Recurse -Force $stage
   Write-Host "Built $zip"
 }

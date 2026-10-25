@@ -1,0 +1,81 @@
+[size=5][b]Map Street View 3.0[/b][/size]
+[size=3]Rotate, tilt, and zoom the world map, the way you could at launch. Mouse, controller, and keyboard. Built for game version 2.5.[/size]
+
+At launch the world map had a free camera you could spin and tilt. Patch 1.5 removed it, but the engine still has the rotate and tilt controls, just unused. This mod turns them back on and fixes the problems that came with them.
+
+[size=4][b]What's new in 3.0[/b][/size]
+[list]
+[*][b]Mouse support.[/b] Hold right mouse and drag to rotate and tilt. A quick right-click still sets a waypoint. No Input Loader needed.
+[*][b]Zooming keeps your view.[/b] The game snaps the tilt back to a preset on every zoom step; the mod now puts it back where you had it.
+[*][b]No more drift.[/b] The map no longer creeps or rotates on its own with a worn or sensitive stick.
+[*][b]The right stick only rotates.[/b] It no longer slides the map at the same time.
+[*][b]Remembers your view[/b] between map visits.
+[*][b]Hold Jump to V[/b] to face north at the default tilt again.
+[*]A [b]Rotate[/b] button hint, adjustable pan speed, and rotation sounds you can turn off.
+[/list]
+
+[size=4][b]Controls[/b][/size]
+[list]
+[*][b]Mouse:[/b] hold right mouse and drag to rotate and tilt. Quick right-click to set a waypoint.
+[*][b]Controller:[/b] right stick to rotate and tilt.
+[*][b]Keyboard:[/b] arrow keys to rotate and tilt.
+[*][b]Any:[/b] hold Jump to V (Tab / left stick click) to reset the view.
+[/list]
+
+[size=4][b]Requirements[/b][/size]
+[list]
+[*][url=https://www.nexusmods.com/cyberpunk2077/mods/1511]redscript[/url]. That's it.
+[*]Optional: [url=https://www.nexusmods.com/cyberpunk2077/mods/4885]Mod Settings[/url] lets you change the options in-game. Without it, everything still works with the defaults.
+[/list]
+
+[size=4][b]Install[/b][/size]
+Install with Vortex or Mod Organizer 2, or extract the zip into your [i]Cyberpunk 2077[/i] folder so you have:
+[code]Cyberpunk 2077/r6/scripts/MapStreetView/MapStreetView.reds
+Cyberpunk 2077/r6/scripts/MapStreetView/MapStreetViewSettings.reds[/code]
+Upgrading from 2.x: just overwrite.
+
+[b][color=#ff6666]Remove "Map Rotation with Mouse" if you have it.[/color][/b] It changes the same map controls, and the two will fight.
+
+[size=4][b]Which file do I want?[/b][/size]
+[list]
+[*][b]Standard[/b]: what most people want.
+[*][b]Silent[/b]: no rotation sounds.
+[*][b]Inverted Tilt[/b]: tilt is inverted for both stick and mouse.
+[*][b]No Mouse Drag[/b]: right mouse stays exactly vanilla; rotate with the right stick or arrow keys.
+[/list]
+They're all the same mod with different defaults. With Mod Settings installed, any of them can be switched to any other in-game.
+
+[size=4][b]Settings[/b][/size]
+Either use Mod Settings in-game ([i]Settings > Mods > Map Street View[/i]), or open [i]MapStreetViewSettings.reds[/i] in a text editor, change the value after the [b]=[/b], and restart the game.
+[list]
+[*]Keep view when zooming [i](on)[/i]
+[*]Also keep rotation when zooming [i](off)[/i]
+[*]Remember view between map visits [i](on)[/i]
+[*]Hold Jump to V to reset view [i](on)[/i]
+[*]Right-drag rotates [i](on)[/i], mouse sensitivity, invert mouse rotation and tilt
+[*]Stick deadzone [i](0.15; raise it if the map moves on its own)[/i], rotation speed, invert rotation and tilt
+[*]Pan speed for WASD and the left stick
+[*]Rotation sounds [i](on)[/i], Rotate button hint [i](on)[/i]
+[*]Debug overlay [i](off; for bug reports)[/i]
+[/list]
+
+[size=4][b]Good to know[/b][/size]
+[list]
+[*]The game limits how far the map can tilt; it won't go all the way to street level. That limit is in the engine, not the mod.
+[*]Not compatible with other mods that change rotating or panning on the world map, such as [i]Map Rotation with Mouse[/i] or [i]3D World Map Explorer[/i].
+[*]Flat 2D map replacers work, but tilting them looks odd because the map icons are 3D.
+[*]Map skins and recolours work.
+[/list]
+
+[size=4][b]Reporting a bug[/b][/size]
+Turn on [b]Debug overlay[/b] in the settings, reproduce the problem with the map open, and post a screenshot along with your game version. The overlay shows exactly what the camera is doing.
+
+[size=4][b]Source[/b][/size]
+[url=https://github.com/bknie1/MapStreetView]github.com/bknie1/MapStreetView[/url]
+
+[size=4][b]Credits[/b][/size]
+[list]
+[*][b]HaywirePhoenix[/b] for the original deadzone fix.
+[*][b]MikhailVP[/b] and [b]cutterhead[/b] for pointing out that the right stick should stop panning while it rotates.
+[*]Everyone in the comments who reported bugs and asked for mouse controls. This update is built from your posts.
+[/list]
