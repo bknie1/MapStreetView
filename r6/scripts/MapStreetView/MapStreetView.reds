@@ -6,19 +6,18 @@
 //   Mouse       right-drag rotates and tilts; a plain right-click still sets a waypoint
 //   Controller  right stick rotates and tilts (it no longer also slides the map)
 //   Keyboard    arrow keys rotate and tilt
-//   Any         double-tap Jump to Player to face north again
+//   Any         hold Jump to Player to face north at the default tilt again
 //
 // Options live in MapStreetViewSettings.reds.
 //
 // How it works, for the curious:
-//   The map camera's RotateYaw/RotatePitch take a *speed*, not an angle. The
-//   engine keeps turning at the last speed it was handed until it gets a new
-//   one. Older versions sent nothing while the stick sat inside the deadzone,
-//   so a stick resting at 0.12 left the camera creeping forever; that was the
-//   drift people kept reporting. Now every speed goes through MSVCamera, which
-//   always sends 0 when idle and adds up speed x time, so it knows how far
-//   you've turned. Each zoom step snaps the tilt back to that zoom level's
-//   preset (that part is the engine, not us), so once the zoom settles we
+//   The map camera's RotateYaw/RotatePitch are a nudge for the current frame
+//   only. Vanilla's input sends the stick value every frame, which is what
+//   makes it turn. So MSVCamera runs its own once-a-frame tick and sends the
+//   rotation from there, for the stick, the mouse, and for steering the view
+//   back after a zoom. Because every turn goes through that tick, it can add
+//   up how far you've turned. Each zoom step snaps the tilt back to that zoom
+//   level's preset (that's the engine, not us); once the zoom settles we
 //   steer back to where you had it.
 
 // Keeps the last view between map visits for the rest of the play session.
@@ -60,32 +59,27 @@ public func MSVRotateLabel() -> String {
   return label;
 }
 
-// Owns every rotation speed the mod sends to the map camera.
+// Owns every rotation the mod sends to the map camera.
 //
-// Positions are kept in "speed-seconds": holding full speed for one second
-// moves 1.0. We never need to know what that is in degrees, because we only
-// ever replay our own movement back to the engine.
+// Positions are kept in "speed-seconds": full stick for one second moves 1.0.
+// We never need degrees, because we only ever replay our own movement.
 public class MSVCamera extends IScriptable {
+  private let m_map: wref<WorldMapMenuGameController>;
   private let m_preview: wref<inkWorldMapPreviewGameController>;
   private let m_audio: wref<AudioSystem>;
   private let m_game: GameInstance;
   private let m_cfg: ref<MapStreetViewSettings>;
 
-  // Two invisible widgets whose animations double as real-time timers. Game
-  // time is frozen while the map is open, so the delay system is no use here.
+  // An invisible widget whose one-frame animation is our per-frame tick.
+  // Game time is frozen while the map is open, so the delay system is no use.
   private let m_tickWidget: wref<inkWidget>;
-  private let m_zoomWidget: wref<inkWidget>;
   private let m_tickProxy: ref<inkAnimProxy>;
-  private let m_zoomProxy: ref<inkAnimProxy>;
-  private let m_zoomTimeout: Float;
+  private let m_lastTick: Float;
+  private let m_frameTime: Float;
 
   // Stick and arrow key speeds, after deadzone and sensitivity.
   private let m_stickYaw: Float;
   private let m_stickPitch: Float;
-
-  // Speeds the engine is running with right now.
-  private let m_sentYaw: Float;
-  private let m_sentPitch: Float;
 
   // Where the camera is and where we want it. Yaw counts from how the map
   // opened; pitch counts from the current zoom level's preset tilt.
@@ -94,56 +88,61 @@ public class MSVCamera extends IScriptable {
   private let m_targetYaw: Float;
   private let m_targetPitch: Float;
 
-  private let m_lastTime: Float;
+  // Zoom in progress. The engine's "zoom finished" event doesn't fire on 2.5,
+  // so we watch the zoom value until it stops changing.
   private let m_zoomPending: Bool;
+  private let m_zoomStart: Float;
+  private let m_zoomTimeout: Float;
+  private let m_zoomValue: Float;
+  private let m_zoomSteadySince: Float;
+  private let m_zoomMoved: Bool;
+
+  // Hold-to-reset.
+  private let m_holding: Bool;
+  private let m_holdStart: Float;
+  private let m_holdDone: Bool;
+
   private let m_dragging: Bool;
   private let m_soundPlaying: Bool;
 
   private let m_debugText: wref<inkText>;
   private let m_debugLines: array<String>;
 
-  public final func Setup(preview: wref<inkWorldMapPreviewGameController>, audio: wref<AudioSystem>, game: GameInstance, root: wref<inkCompoundWidget>, cfg: ref<MapStreetViewSettings>, zoomTimeout: Float) -> Void {
+  public final func Setup(map: wref<WorldMapMenuGameController>, preview: wref<inkWorldMapPreviewGameController>, audio: wref<AudioSystem>, game: GameInstance, root: wref<inkCompoundWidget>, cfg: ref<MapStreetViewSettings>, zoomTimeout: Float) -> Void {
+    let ticker: ref<inkRectangle> = new inkRectangle();
+    this.m_map = map;
     this.m_preview = preview;
     this.m_audio = audio;
     this.m_game = game;
     this.m_cfg = cfg;
     this.m_zoomTimeout = zoomTimeout;
-    this.m_tickWidget = this.MakeTimerWidget(root, n"MapStreetViewTick");
-    this.m_zoomWidget = this.MakeTimerWidget(root, n"MapStreetViewZoom");
+    this.m_frameTime = 1.00 / 60.00;
+    ticker.SetName(n"MapStreetViewTick");
+    ticker.SetSize(new Vector2(0.00, 0.00));
+    ticker.SetInteractive(false);
+    ticker.Reparent(root);
+    this.m_tickWidget = ticker;
     this.MakeDebugText(root);
-    this.m_lastTime = this.Now();
-  }
-
-  private final func MakeTimerWidget(root: wref<inkCompoundWidget>, name: CName) -> wref<inkWidget> {
-    let widget: ref<inkRectangle> = new inkRectangle();
-    widget.SetName(name);
-    widget.SetSize(new Vector2(0.00, 0.00));
-    widget.SetInteractive(false);
-    widget.Reparent(root);
-    return widget;
   }
 
   // --- Input -----------------------------------------------------------------
 
   public final func SetStickYaw(raw: Float) -> Void {
-    this.Integrate();
     this.m_stickYaw = this.ShapeStick(raw, this.m_cfg.invertYaw);
-    this.Update();
+    this.Wake();
   }
 
   public final func SetStickPitch(raw: Float) -> Void {
-    this.Integrate();
     this.m_stickPitch = this.ShapeStick(raw, this.m_cfg.invertPitch);
-    this.Update();
+    this.Wake();
   }
 
   public final func AddMouse(dx: Float, dy: Float) -> Void {
-    // Mouse moves the goal; the catch-up in Update chases it smoothly.
+    // Mouse moves the goal; the tick chases it smoothly.
     let scale: Float = 0.004 * this.m_cfg.mouseSensitivity;
-    this.Integrate();
     this.m_targetYaw += (this.m_cfg.mouseInvertYaw ? -dx : dx) * scale;
     this.m_targetPitch += (this.m_cfg.mouseInvertPitch ? -dy : dy) * scale;
-    this.Update();
+    this.Wake();
   }
 
   public final func SetDragging(dragging: Bool) -> Void {
@@ -159,22 +158,31 @@ public class MSVCamera extends IScriptable {
     return raw * this.m_cfg.panSpeed;
   }
 
+  public final func BeginHold() -> Void {
+    this.m_holding = true;
+    this.m_holdStart = this.Now();
+    this.m_holdDone = false;
+    this.Wake();
+  }
+
+  public final func EndHold() -> Void {
+    this.m_holding = false;
+  }
+
   // --- View ------------------------------------------------------------------
 
   public final func ResetView() -> Void {
-    this.Integrate();
     this.m_targetYaw = 0.00;
     this.m_targetPitch = 0.00;
     this.Log("reset view");
-    this.Update();
+    this.Wake();
   }
 
   public final func RestoreView(yaw: Float, pitch: Float) -> Void {
-    this.Integrate();
     this.m_targetYaw = yaw;
     this.m_targetPitch = pitch;
     this.Log("restore view yaw " + FloatToStringPrec(yaw, 3) + " pitch " + FloatToStringPrec(pitch, 3));
-    this.Update();
+    this.Wake();
   }
 
   public final func GetTargetYaw() -> Float {
@@ -188,20 +196,21 @@ public class MSVCamera extends IScriptable {
   public final func ZoomLevelChanged(oldLevel: Int32, newLevel: Int32) -> Void {
     // Hold off steering while the engine tweens to the new level, or we'd
     // fight it. Stick input still goes through.
-    this.Integrate();
+    let now: Float = this.Now();
     this.m_zoomPending = true;
+    this.m_zoomStart = now;
+    this.m_zoomSteadySince = now;
+    this.m_zoomMoved = false;
+    this.m_zoomValue = this.ReadZoom();
     this.Log("zoom level " + IntToString(oldLevel) + " -> " + IntToString(newLevel) + ", tilt was " + FloatToStringPrec(this.m_pitch, 3));
-    this.StartZoomTimeout();
-    this.Update();
+    this.Wake();
   }
 
   public final func ZoomFinished() -> Void {
     if !this.m_zoomPending {
       return;
     };
-    this.Integrate();
     this.m_zoomPending = false;
-    this.StopZoomTimeout();
     // The engine just put the tilt back on the preset, so we're at 0 again.
     // Leaving the target alone is what makes us steer back.
     this.m_pitch = 0.00;
@@ -211,83 +220,138 @@ public class MSVCamera extends IScriptable {
     if this.m_cfg.keepRotationOnZoom {
       this.m_yaw = 0.00;
     };
-    this.Log("zoom settled, steering to yaw " + FloatToStringPrec(this.m_targetYaw, 3) + " pitch " + FloatToStringPrec(this.m_targetPitch, 3));
-    this.Update();
+    this.Log("zoom settled after " + FloatToStringPrec(this.Now() - this.m_zoomStart, 2) + "s, steering to yaw " + FloatToStringPrec(this.m_targetYaw, 3) + " pitch " + FloatToStringPrec(this.m_targetPitch, 3));
+    this.Wake();
   }
 
   public final func Stop() -> Void {
-    this.Integrate();
     this.m_stickYaw = 0.00;
     this.m_stickPitch = 0.00;
     this.m_targetYaw = this.m_yaw;
     this.m_targetPitch = this.m_pitch;
     this.m_dragging = false;
-    this.Send(0.00, 0.00);
+    this.m_holding = false;
+    this.m_zoomPending = false;
     if IsDefined(this.m_tickProxy) {
+      this.m_tickProxy.UnregisterFromCallback(inkanimEventType.OnFinish, this, n"OnTick");
       this.m_tickProxy.Stop(true);
       this.m_tickProxy = null;
     };
-    this.StopZoomTimeout();
   }
 
-  // --- Internals -------------------------------------------------------------
+  // --- Tick ------------------------------------------------------------------
 
   private final func Now() -> Float {
     return EngineTime.ToFloat(GameInstance.GetEngineTime(this.m_game));
   }
 
-  // Bring our position up to date with whatever the engine did since last time.
-  private final func Integrate() -> Void {
-    let now: Float = this.Now();
-    let dt: Float = now - this.m_lastTime;
-    this.m_lastTime = now;
-    if dt <= 0.00 {
-      return;
+  private final func ReadZoom() -> Float {
+    if IsDefined(this.m_map) {
+      return this.m_map.MSVCurrentZoom();
     };
-    this.m_yaw += this.m_sentYaw * dt;
-    this.m_pitch += this.m_sentPitch * dt;
-    // Stick input carries the goal along with it, so catching up only ever
-    // closes a gap the player didn't make with the stick themselves.
-    this.m_targetYaw += this.m_stickYaw * dt;
-    this.m_targetPitch += this.m_stickPitch * dt;
+    return 0.00;
   }
 
-  private final func Update() -> Void {
-    let yaw: Float = this.m_stickYaw;
-    let pitch: Float = this.m_stickPitch;
-    let catchingUp: Bool = false;
-    if !this.m_zoomPending {
-      yaw += this.CatchUp(this.m_targetYaw - this.m_yaw);
-      pitch += this.CatchUp(this.m_targetPitch - this.m_pitch);
-      catchingUp = AbsF(this.m_targetYaw - this.m_yaw) >= 0.002 || AbsF(this.m_targetPitch - this.m_pitch) >= 0.002;
+  private final func Wake() -> Void {
+    if IsDefined(this.m_tickProxy) || !IsDefined(this.m_tickWidget) {
+      return;
     };
-    this.Send(ClampF(yaw, -1.00, 1.00), ClampF(pitch, -1.00, 1.00));
-    if catchingUp {
-      this.StartTick();
+    this.m_lastTick = this.Now();
+    this.PlayTick();
+  }
+
+  private final func PlayTick() -> Void {
+    // A near-zero duration finishes on the very next frame.
+    let anim: ref<inkAnimDef> = new inkAnimDef();
+    let wait: ref<inkAnimTransparency> = new inkAnimTransparency();
+    wait.SetStartTransparency(1.00);
+    wait.SetEndTransparency(1.00);
+    wait.SetDuration(0.001);
+    anim.AddInterpolator(wait);
+    this.m_tickProxy = this.m_tickWidget.PlayAnimation(anim);
+    this.m_tickProxy.RegisterToCallback(inkanimEventType.OnFinish, this, n"OnTick");
+  }
+
+  protected cb func OnTick(proxy: ref<inkAnimProxy>) -> Bool {
+    let now: Float = this.Now();
+    let dt: Float = now - this.m_lastTick;
+    this.m_tickProxy = null;
+    this.m_lastTick = now;
+    // Use the real frame time, but don't let a hitch count as one giant frame.
+    if dt > 0.00 && dt < 0.10 {
+      this.m_frameTime = dt;
+    } else {
+      dt = this.m_frameTime;
+    };
+    this.Step(now, dt);
+    if this.NeedsTick() {
+      this.PlayTick();
+    };
+  }
+
+  private final func Step(now: Float, dt: Float) -> Void {
+    let yaw: Float;
+    let pitch: Float;
+    if this.m_zoomPending {
+      this.WatchZoom(now);
+    };
+    if this.m_holding && !this.m_holdDone && now - this.m_holdStart >= 0.60 {
+      this.m_holdDone = true;
+      this.ResetView();
+    };
+    // The stick drives directly and carries the goal along with it, so the
+    // catch-up only ever closes a gap the player didn't make with the stick.
+    if this.m_stickYaw != 0.00 {
+      yaw = this.m_stickYaw;
+      this.m_targetYaw += yaw * dt;
+    } else {
+      if !this.m_zoomPending {
+        yaw = this.CatchUp(this.m_targetYaw - this.m_yaw);
+      };
+    };
+    if this.m_stickPitch != 0.00 {
+      pitch = this.m_stickPitch;
+      this.m_targetPitch += pitch * dt;
+    } else {
+      if !this.m_zoomPending {
+        pitch = this.CatchUp(this.m_targetPitch - this.m_pitch);
+      };
+    };
+    if IsDefined(this.m_preview) {
+      if yaw != 0.00 {
+        this.m_preview.RotateYaw(yaw);
+        this.m_yaw += yaw * dt;
+      };
+      if pitch != 0.00 {
+        this.m_preview.RotatePitch(pitch);
+        this.m_pitch += pitch * dt;
+      };
     };
     this.UpdateSound();
     this.RefreshDebugText();
   }
 
-  // Close a gap quickly but smoothly: speed is proportional to what's left.
-  private final func CatchUp(gap: Float) -> Float {
-    if AbsF(gap) < 0.002 {
-      return 0.00;
-    };
-    return ClampF(gap / 0.08, -1.00, 1.00);
+  private final func NeedsTick() -> Bool {
+    return this.m_stickYaw != 0.00 || this.m_stickPitch != 0.00 || this.m_zoomPending || (this.m_holding && !this.m_holdDone) || AbsF(this.m_targetYaw - this.m_yaw) >= 0.003 || AbsF(this.m_targetPitch - this.m_pitch) >= 0.003;
   }
 
-  private final func Send(yaw: Float, pitch: Float) -> Void {
-    if !IsDefined(this.m_preview) {
-      return;
+  // Close a gap quickly but smoothly: full speed when far, easing in near the end.
+  private final func CatchUp(gap: Float) -> Float {
+    if AbsF(gap) < 0.003 {
+      return 0.00;
     };
-    if yaw != this.m_sentYaw {
-      this.m_preview.RotateYaw(yaw);
-      this.m_sentYaw = yaw;
+    return ClampF(gap / 0.15, -1.00, 1.00);
+  }
+
+  private final func WatchZoom(now: Float) -> Void {
+    let zoom: Float = this.ReadZoom();
+    if AbsF(zoom - this.m_zoomValue) > 0.0001 {
+      this.m_zoomValue = zoom;
+      this.m_zoomSteadySince = now;
+      this.m_zoomMoved = true;
     };
-    if pitch != this.m_sentPitch {
-      this.m_preview.RotatePitch(pitch);
-      this.m_sentPitch = pitch;
+    if (this.m_zoomMoved && now - this.m_zoomSteadySince > 0.12) || now - this.m_zoomStart > this.m_zoomTimeout {
+      this.ZoomFinished();
     };
   }
 
@@ -318,53 +382,7 @@ public class MSVCamera extends IScriptable {
     };
   }
 
-  private final func PlayTimer(widget: wref<inkWidget>, duration: Float, callback: CName) -> ref<inkAnimProxy> {
-    let anim: ref<inkAnimDef> = new inkAnimDef();
-    let wait: ref<inkAnimTransparency> = new inkAnimTransparency();
-    let proxy: ref<inkAnimProxy>;
-    wait.SetStartTransparency(1.00);
-    wait.SetEndTransparency(1.00);
-    wait.SetDuration(duration);
-    anim.AddInterpolator(wait);
-    proxy = widget.PlayAnimation(anim);
-    proxy.RegisterToCallback(inkanimEventType.OnFinish, this, callback);
-    return proxy;
-  }
-
-  private final func StartTick() -> Void {
-    if IsDefined(this.m_tickProxy) || !IsDefined(this.m_tickWidget) {
-      return;
-    };
-    this.m_tickProxy = this.PlayTimer(this.m_tickWidget, 0.016, n"OnTick");
-  }
-
-  protected cb func OnTick(proxy: ref<inkAnimProxy>) -> Bool {
-    this.m_tickProxy = null;
-    this.Integrate();
-    this.Update();
-  }
-
-  // If a zoom never reports finishing, don't stay frozen.
-  private final func StartZoomTimeout() -> Void {
-    this.StopZoomTimeout();
-    if IsDefined(this.m_zoomWidget) {
-      this.m_zoomProxy = this.PlayTimer(this.m_zoomWidget, this.m_zoomTimeout, n"OnZoomTimeout");
-    };
-  }
-
-  private final func StopZoomTimeout() -> Void {
-    if IsDefined(this.m_zoomProxy) {
-      this.m_zoomProxy.UnregisterFromCallback(inkanimEventType.OnFinish, this, n"OnZoomTimeout");
-      this.m_zoomProxy.Stop(true);
-      this.m_zoomProxy = null;
-    };
-  }
-
-  protected cb func OnZoomTimeout(proxy: ref<inkAnimProxy>) -> Bool {
-    this.m_zoomProxy = null;
-    this.Log("zoom finish never arrived, carrying on");
-    this.ZoomFinished();
-  }
+  // --- Debug overlay ---------------------------------------------------------
 
   // Debug output goes on screen, over the map, so it can be read or
   // screenshotted without any logging mods.
@@ -390,7 +408,7 @@ public class MSVCamera extends IScriptable {
     text.SetFontSize(26);
     text.SetTintColor(new HDRColor(1.00, 0.85, 0.30, 1.00));
     text.SetAnchor(inkEAnchor.TopLeft);
-    text.SetMargin(new inkMargin(60.00, 220.00, 0.00, 0.00));
+    text.SetMargin(new inkMargin(60.00, 400.00, 0.00, 0.00));
     text.SetInteractive(false);
     text.Reparent(root);
     this.m_debugText = text;
@@ -402,7 +420,7 @@ public class MSVCamera extends IScriptable {
     if !IsDefined(this.m_debugText) {
       return;
     };
-    body = "MAP STREET VIEW DEBUG\nnow  yaw " + FloatToStringPrec(this.m_yaw, 3) + " pitch " + FloatToStringPrec(this.m_pitch, 3) + "  |  goal yaw " + FloatToStringPrec(this.m_targetYaw, 3) + " pitch " + FloatToStringPrec(this.m_targetPitch, 3) + "  |  speed " + FloatToStringPrec(this.m_sentYaw, 2) + " / " + FloatToStringPrec(this.m_sentPitch, 2) + (this.m_zoomPending ? "  |  ZOOMING" : "");
+    body = "MAP STREET VIEW DEBUG\nnow  yaw " + FloatToStringPrec(this.m_yaw, 3) + " pitch " + FloatToStringPrec(this.m_pitch, 3) + "  |  goal yaw " + FloatToStringPrec(this.m_targetYaw, 3) + " pitch " + FloatToStringPrec(this.m_targetPitch, 3) + "  |  stick " + FloatToStringPrec(this.m_stickYaw, 2) + " / " + FloatToStringPrec(this.m_stickPitch, 2) + "  |  " + IntToString(RoundF(1.00 / this.m_frameTime)) + " fps" + (this.m_zoomPending ? "  |  ZOOMING" : "");
     while i < ArraySize(this.m_debugLines) {
       body += "\n" + this.m_debugLines[i];
       i += 1;
@@ -422,9 +440,6 @@ private let m_msvSettings: ref<MapStreetViewSettings>;
 @addField(WorldMapMenuGameController)
 private let m_msvViewRestored: Bool;
 
-@addField(WorldMapMenuGameController)
-private let m_msvLastJumpTime: Float;
-
 // Right mouse: pressed, and whether it has turned into a drag yet.
 @addField(WorldMapMenuGameController)
 private let m_msvRightDown: Bool;
@@ -433,7 +448,10 @@ private let m_msvRightDown: Bool;
 private let m_msvRightDragging: Bool;
 
 @addField(WorldMapMenuGameController)
-private let m_msvRightSetsWaypoint: Bool;
+private let m_msvRightDragged: Bool;
+
+@addField(WorldMapMenuGameController)
+private let m_msvWaypointPending: Bool;
 
 @addField(WorldMapMenuGameController)
 private let m_msvRightTravel: Float;
@@ -452,18 +470,23 @@ private final func MSVSettings() -> ref<MapStreetViewSettings> {
   return this.m_msvSettings;
 }
 
+@addMethod(WorldMapMenuGameController)
+public final func MSVCurrentZoom() -> Float {
+  return this.GetCurrentZoom();
+}
+
 @wrapMethod(WorldMapMenuGameController)
 protected cb func OnEntityAttached() -> Bool {
   let result: Bool = wrappedMethod();
   let settings: ref<WorldMapSettings_Record> = this.GetSettings();
-  let zoomTimeout: Float = 1.50;
+  let zoomTimeout: Float = 1.00;
   if IsDefined(settings) {
-    zoomTimeout = MaxF(settings.ZoomTransitionTime(), settings.MouseZoomTransitionTime()) + 0.50;
+    zoomTimeout = MaxF(settings.ZoomTransitionTime(), settings.MouseZoomTransitionTime()) + 0.15;
   };
   // Fresh settings each visit so changes made in Mod Settings apply right away.
   this.m_msvSettings = new MapStreetViewSettings();
   this.m_msvCamera = new MSVCamera();
-  this.m_msvCamera.Setup(this.GetEntityPreview(), this.m_audioSystem, this.m_player.GetGame(), this.GetRootCompoundWidget(), this.m_msvSettings, zoomTimeout);
+  this.m_msvCamera.Setup(this, this.GetEntityPreview(), this.m_audioSystem, this.m_player.GetGame(), this.GetRootCompoundWidget(), this.m_msvSettings, zoomTimeout);
   this.RegisterToGlobalInputCallback(n"OnPostOnRelative", this, n"OnMSVRelativeInput");
   this.MSVLogMapSettings();
   if this.m_readyToZoom {
@@ -576,29 +599,35 @@ private final func HandleAxisInput(e: ref<inkPointerEvent>) -> Void {
 
 @wrapMethod(WorldMapMenuGameController)
 private final func HandlePressInput(e: ref<inkPointerEvent>) -> Void {
-  let now: Float;
-  if IsDefined(this.m_msvCamera) && this.MSVSettings().mouseDragRotates && e.IsAction(n"world_map_menu_rotate_mouse") {
-    // Right mouse is both "set waypoint" and "rotate". Wait for release:
-    // if the mouse moved it was a drag, otherwise set the waypoint then.
-    this.m_msvRightDown = true;
-    this.m_msvRightDragging = false;
-    this.m_msvRightTravel = 0.00;
-    this.m_msvRightHeldX = 0.00;
-    this.m_msvRightHeldY = 0.00;
-    this.m_msvRightSetsWaypoint = e.IsAction(n"world_map_menu_track_waypoint");
-    // Right mouse is also bound to Back; this flag is how vanilla keeps the
-    // map from closing on a right-click.
-    this.m_pressedRMB = true;
-    return;
-  };
-  if IsDefined(this.m_msvCamera) && this.MSVSettings().doubleTapReset && e.IsAction(n"world_map_menu_jump_to_player") {
-    now = EngineTime.ToFloat(GameInstance.GetEngineTime(this.m_player.GetGame()));
-    if now - this.m_msvLastJumpTime < 0.40 {
-      this.m_msvCamera.ResetView();
-      this.m_msvLastJumpTime = 0.00;
-    } else {
-      this.m_msvLastJumpTime = now;
+  let isRotate: Bool;
+  let isWaypoint: Bool;
+  if IsDefined(this.m_msvCamera) && this.MSVSettings().mouseDragRotates && this.m_player.PlayerLastUsedKBM() {
+    // Right mouse arrives as two separate events, "rotate" and "set
+    // waypoint". Hold the waypoint until release: if the mouse moved in
+    // between it was a drag, otherwise set the waypoint then.
+    isRotate = e.IsAction(n"world_map_menu_rotate_mouse");
+    isWaypoint = e.IsAction(n"world_map_menu_track_waypoint");
+    if isRotate || isWaypoint {
+      if !this.m_msvRightDragging {
+        this.m_msvRightDragged = false;
+      };
+      if isRotate {
+        this.m_msvRightDown = true;
+        this.m_msvRightTravel = 0.00;
+        this.m_msvRightHeldX = 0.00;
+        this.m_msvRightHeldY = 0.00;
+      };
+      if isWaypoint {
+        this.m_msvWaypointPending = true;
+      };
+      // Right mouse is also bound to Back; this flag is how vanilla keeps the
+      // map from closing on a right-click.
+      this.m_pressedRMB = true;
+      return;
     };
+  };
+  if IsDefined(this.m_msvCamera) && this.MSVSettings().holdToReset && e.IsAction(n"world_map_menu_jump_to_player") {
+    this.m_msvCamera.BeginHold();
   };
   wrappedMethod(e);
 }
@@ -613,11 +642,16 @@ private final func HandleReleaseInput(e: ref<inkPointerEvent>) -> Void {
         this.m_msvCamera.SetDragging(false);
       };
       this.SetCursorContext(n"Default");
-    } else {
-      if this.m_msvRightSetsWaypoint {
-        this.TryTrackQuestOrSetWaypoint();
-      };
     };
+  };
+  if this.m_msvWaypointPending && e.IsAction(n"world_map_menu_track_waypoint") {
+    this.m_msvWaypointPending = false;
+    if !this.m_msvRightDragged {
+      this.TryTrackQuestOrSetWaypoint();
+    };
+  };
+  if IsDefined(this.m_msvCamera) && e.IsAction(n"world_map_menu_jump_to_player") {
+    this.m_msvCamera.EndHold();
   };
   wrappedMethod(e);
 }
@@ -647,6 +681,7 @@ protected cb func OnMSVRelativeInput(e: ref<inkPointerEvent>) -> Bool {
       return false;
     };
     this.m_msvRightDragging = true;
+    this.m_msvRightDragged = true;
     this.m_msvCamera.SetDragging(true);
     this.SetCursorContext(n"Pan");
     dx = this.m_msvRightHeldX;
@@ -677,8 +712,8 @@ private final func RefreshInputHints() -> Void {
   this.QueueEvent(evt);
 }
 
-// With debugLog on, write what the game's map camera is set up with, so
-// problems on new patches can be diagnosed from a log instead of guesswork.
+// With the debug overlay on, show what the game's map camera is set up with,
+// so problems on new patches can be diagnosed from a screenshot.
 @addMethod(WorldMapMenuGameController)
 private final func MSVLogMapSettings() -> Void {
   let settings: ref<WorldMapSettings_Record>;
@@ -693,22 +728,11 @@ private final func MSVLogMapSettings() -> Void {
     this.m_msvCamera.Log("no map settings record");
     return;
   };
-  this.m_msvCamera.Log("camera mode " + (Equals(this.GetEntityPreview().GetCameraMode(), gameuiEWorldMapCameraMode.ZoomLevels) ? "ZoomLevels" : "TopDown") + ", current zoom " + FloatToStringPrec(this.GetCurrentZoom(), 3));
+  this.m_msvCamera.Log("current zoom " + FloatToStringPrec(this.GetCurrentZoom(), 3) + ", zoom times " + FloatToStringPrec(settings.ZoomTransitionTime(), 2) + " / mouse " + FloatToStringPrec(settings.MouseZoomTransitionTime(), 2));
   settings.ZoomLevels(levels);
   while i < ArraySize(levels) {
     rotation = levels[i].Rotation();
-    this.m_msvCamera.Log("zoom level " + IntToString(i) + ": zoom " + FloatToStringPrec(levels[i].Zoom(), 2) + " pitch " + FloatToStringPrec(rotation.Pitch, 2) + " yaw " + FloatToStringPrec(rotation.Yaw, 2) + " fov " + FloatToStringPrec(levels[i].Fov(), 2));
+    this.m_msvCamera.Log("zoom level " + IntToString(i) + ": zoom " + FloatToStringPrec(levels[i].Zoom(), 2) + " pitch " + FloatToStringPrec(rotation.Pitch, 2));
     i += 1;
   };
-  this.MSVLogCameraRecord("free camera", settings.FreeCamera());
-  this.MSVLogCameraRecord("top-down camera", settings.TopDownCamera());
-}
-
-@addMethod(WorldMapMenuGameController)
-private final func MSVLogCameraRecord(label: String, record: wref<WorldMapFreeCameraSettings_Record>) -> Void {
-  if !IsDefined(record) {
-    this.m_msvCamera.Log(label + ": none");
-    return;
-  };
-  this.m_msvCamera.Log(label + ": pitch " + FloatToStringPrec(record.RotationMin().Pitch, 2) + ".." + FloatToStringPrec(record.RotationMax().Pitch, 2) + " default " + FloatToStringPrec(record.RotationDefault().Pitch, 2) + ", speed yaw " + FloatToStringPrec(record.RotationSpeed().Yaw, 2) + " pitch " + FloatToStringPrec(record.RotationSpeed().Pitch, 2) + ", mouse rotate " + FloatToStringPrec(record.MouseRotateStrength(), 3) + ", zoom " + FloatToStringPrec(record.ZoomMin(), 2) + ".." + FloatToStringPrec(record.ZoomMax(), 2));
 }

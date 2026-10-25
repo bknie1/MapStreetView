@@ -10,11 +10,11 @@ Rewritten for game version 2.5.
 - Fixed the right stick sliding the map while rotating it.
 - Fixed rotation sounds repeating or getting stuck. They no longer share state with vanilla zoom sounds.
 - Added: the view is remembered between map visits.
-- Added: double-tap Jump to Player to reset the view.
+- Added: hold Jump to Player to reset the view.
 - Added: a Rotate button hint.
 - Added: a deadzone for left-stick panning, plus a pan speed option.
 - Added a settings file with optional Mod Settings support. No mod is required.
-- Added a debug log option for diagnosing future patches.
+- Added a debug overlay option for diagnosing future patches.
 
 ## 2.1
 

@@ -13,7 +13,7 @@ At launch the world map had a free camera you could spin and tilt. Patch 1.5 rem
 - **Keyboard:** the arrow keys rotate and tilt.
 - **Zooming keeps your view.** Each zoom step normally snaps the tilt back to a preset. The mod steers it back to where you had it.
 - **Remembers your view** between map visits.
-- **Double-tap Jump to Player** to face north and return to the default tilt.
+- **Hold Jump to Player** to face north and return to the default tilt.
 - **No more drift.** The map no longer creeps or rotates on its own with a worn or sensitive stick.
 - An on-screen **Rotate** button hint, an adjustable pan speed, and sound you can switch off.
 
@@ -42,7 +42,7 @@ Every option has a default that works without any other mods. You have two ways 
 | Keep view when zooming | on | Put your tilt back after each zoom step |
 | Also keep rotation when zooming | off | Only needed if zooming also turns the map for you |
 | Remember view between map visits | on | |
-| Double-tap Jump to Player resets view | on | |
+| Hold Jump to Player to reset view | on | |
 | Right-drag rotates | on | Turn off to leave right mouse as vanilla |
 | Mouse sensitivity / invert | 1.0 / off | |
 | Stick deadzone | 0.15 | Raise if the map moves on its own |
@@ -51,7 +51,7 @@ Every option has a default that works without any other mods. You have two ways 
 | Pan speed | 1.0 | WASD and left stick |
 | Rotation sounds | on | |
 | Show Rotate button hint | on | |
-| Debug log | off | Writes camera details to `r6/logs/redscript_rCURRENT.log` |
+| Debug overlay | off | Shows camera details on the map, for bug reports |
 
 The Nexus page also offers ready-made versions with different defaults: **Silent**, **Inverted tilt**, and **No mouse drag**.
 

@@ -31,9 +31,9 @@ public class MapStreetViewSettings {
 
   @runtimeProperty("ModSettings.mod", "Map Street View")
   @runtimeProperty("ModSettings.category", "Controls")
-  @runtimeProperty("ModSettings.displayName", "Double-tap Jump to Player resets view")
-  @runtimeProperty("ModSettings.description", "Press Jump to Player twice quickly to face north and return to the default tilt.")
-  public let doubleTapReset: Bool = true;
+  @runtimeProperty("ModSettings.displayName", "Hold Jump to Player to reset view")
+  @runtimeProperty("ModSettings.description", "Hold Jump to Player for a moment to face north and return to the default tilt.")
+  public let holdToReset: Bool = true;
 
   // --- Mouse ----------------------------------------------------------------
 
