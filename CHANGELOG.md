@@ -4,7 +4,7 @@
 
 Rewritten for game version 2.5.
 
-- Added mouse controls: hold right mouse and drag to rotate and tilt. Right-click still sets waypoints. No Input Loader needed.
+- Added mouse controls: hold right mouse and drag to rotate and tilt. A quick right-click still sets a waypoint. No Input Loader needed.
 - Fixed zooming resetting the tilt. The view is restored after each zoom step.
 - Fixed the map drifting or rotating on its own. The deadzone now covers rotating and panning, and is rescaled so movement starts smoothly just past it.
 - Fixed the right stick sliding the map while rotating it.
