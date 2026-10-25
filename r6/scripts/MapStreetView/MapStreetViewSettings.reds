@@ -40,7 +40,7 @@ public class MapStreetViewSettings {
   @runtimeProperty("ModSettings.mod", "Map Street View")
   @runtimeProperty("ModSettings.category", "Mouse")
   @runtimeProperty("ModSettings.displayName", "Right-drag rotates")
-  @runtimeProperty("ModSettings.description", "Hold right mouse and drag to rotate and tilt. A plain right-click still sets a waypoint.")
+  @runtimeProperty("ModSettings.description", "Hold right mouse and drag to rotate and tilt. A quick right-click still sets a waypoint.")
   public let mouseDragRotates: Bool = true;
 
   @runtimeProperty("ModSettings.mod", "Map Street View")

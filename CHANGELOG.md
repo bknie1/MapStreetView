@@ -6,7 +6,7 @@ Rewritten for game version 2.5.
 
 - Added mouse controls: hold right mouse and drag to rotate and tilt. Right-click still sets waypoints. No Input Loader needed.
 - Fixed zooming resetting the tilt. The view is restored after each zoom step.
-- Fixed the map drifting or rotating on its own. The camera now gets an explicit stop when a stick returns to center, and the deadzone is rescaled so movement starts smoothly.
+- Fixed the map drifting or rotating on its own. The deadzone now covers rotating and panning, and is rescaled so movement starts smoothly just past it.
 - Fixed the right stick sliding the map while rotating it.
 - Fixed rotation sounds repeating or getting stuck. They no longer share state with vanilla zoom sounds.
 - Added: the view is remembered between map visits.

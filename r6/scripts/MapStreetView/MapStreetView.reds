@@ -454,6 +454,9 @@ private let m_msvRightDragged: Bool;
 private let m_msvWaypointPending: Bool;
 
 @addField(WorldMapMenuGameController)
+private let m_msvRightPressTime: Float;
+
+@addField(WorldMapMenuGameController)
 private let m_msvRightTravel: Float;
 
 @addField(WorldMapMenuGameController)
@@ -611,6 +614,7 @@ private final func HandlePressInput(e: ref<inkPointerEvent>) -> Void {
       if !this.m_msvRightDragging {
         this.m_msvRightDragged = false;
       };
+      this.m_msvRightPressTime = EngineTime.ToFloat(GameInstance.GetEngineTime(this.m_player.GetGame()));
       if isRotate {
         this.m_msvRightDown = true;
         this.m_msvRightTravel = 0.00;
@@ -646,7 +650,9 @@ private final func HandleReleaseInput(e: ref<inkPointerEvent>) -> Void {
   };
   if this.m_msvWaypointPending && e.IsAction(n"world_map_menu_track_waypoint") {
     this.m_msvWaypointPending = false;
-    if !this.m_msvRightDragged {
+    // Only a quick, still click sets a waypoint. A drag, or holding the
+    // button for a while, never does.
+    if !this.m_msvRightDragged && EngineTime.ToFloat(GameInstance.GetEngineTime(this.m_player.GetGame())) - this.m_msvRightPressTime < 0.30 {
       this.TryTrackQuestOrSetWaypoint();
     };
   };

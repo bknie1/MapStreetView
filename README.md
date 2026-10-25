@@ -8,7 +8,7 @@ Rotate, tilt, and zoom the Cyberpunk 2077 world map, the way you could at launch
 
 At launch the world map had a free camera you could spin and tilt. Patch 1.5 removed it, but the engine still has the rotate and tilt controls, just unused. This mod turns them back on and fixes the problems that came with them.
 
-- **Mouse:** hold right mouse and drag to rotate and tilt. A plain right-click still sets a waypoint.
+- **Mouse:** hold right mouse and drag to rotate and tilt. A quick right-click still sets a waypoint.
 - **Controller:** the right stick rotates and tilts. It no longer slides the map at the same time.
 - **Keyboard:** the arrow keys rotate and tilt.
 - **Zooming keeps your view.** Each zoom step normally snaps the tilt back to a preset. The mod steers it back to where you had it.
