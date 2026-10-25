@@ -99,6 +99,9 @@ public class MSVCamera extends IScriptable {
   private let m_dragging: Bool;
   private let m_soundPlaying: Bool;
 
+  private let m_debugText: wref<inkText>;
+  private let m_debugLines: array<String>;
+
   public final func Setup(preview: wref<inkWorldMapPreviewGameController>, audio: wref<AudioSystem>, game: GameInstance, root: wref<inkCompoundWidget>, cfg: ref<MapStreetViewSettings>, zoomTimeout: Float) -> Void {
     this.m_preview = preview;
     this.m_audio = audio;
@@ -107,6 +110,7 @@ public class MSVCamera extends IScriptable {
     this.m_zoomTimeout = zoomTimeout;
     this.m_tickWidget = this.MakeTimerWidget(root, n"MapStreetViewTick");
     this.m_zoomWidget = this.MakeTimerWidget(root, n"MapStreetViewZoom");
+    this.MakeDebugText(root);
     this.m_lastTime = this.Now();
   }
 
@@ -262,6 +266,7 @@ public class MSVCamera extends IScriptable {
       this.StartTick();
     };
     this.UpdateSound();
+    this.RefreshDebugText();
   }
 
   // Close a gap quickly but smoothly: speed is proportional to what's left.
@@ -361,10 +366,48 @@ public class MSVCamera extends IScriptable {
     this.ZoomFinished();
   }
 
+  // Debug output goes on screen, over the map, so it can be read or
+  // screenshotted without any logging mods.
   public final func Log(text: String) -> Void {
-    if this.m_cfg.debugLog {
-      ModLog(n"MapStreetView", text);
+    if !this.m_cfg.debugLog {
+      return;
     };
+    ArrayPush(this.m_debugLines, text);
+    if ArraySize(this.m_debugLines) > 16 {
+      ArrayErase(this.m_debugLines, 0);
+    };
+    this.RefreshDebugText();
+  }
+
+  private final func MakeDebugText(root: wref<inkCompoundWidget>) -> Void {
+    let text: ref<inkText>;
+    if !this.m_cfg.debugLog {
+      return;
+    };
+    text = new inkText();
+    text.SetName(n"MapStreetViewDebug");
+    text.SetFontFamily("base\\gameplay\\gui\\fonts\\raj\\raj.inkfontfamily");
+    text.SetFontSize(26);
+    text.SetTintColor(new HDRColor(1.00, 0.85, 0.30, 1.00));
+    text.SetAnchor(inkEAnchor.TopLeft);
+    text.SetMargin(new inkMargin(60.00, 220.00, 0.00, 0.00));
+    text.SetInteractive(false);
+    text.Reparent(root);
+    this.m_debugText = text;
+  }
+
+  private final func RefreshDebugText() -> Void {
+    let body: String;
+    let i: Int32;
+    if !IsDefined(this.m_debugText) {
+      return;
+    };
+    body = "MAP STREET VIEW DEBUG\nnow  yaw " + FloatToStringPrec(this.m_yaw, 3) + " pitch " + FloatToStringPrec(this.m_pitch, 3) + "  |  goal yaw " + FloatToStringPrec(this.m_targetYaw, 3) + " pitch " + FloatToStringPrec(this.m_targetPitch, 3) + "  |  speed " + FloatToStringPrec(this.m_sentYaw, 2) + " / " + FloatToStringPrec(this.m_sentPitch, 2) + (this.m_zoomPending ? "  |  ZOOMING" : "");
+    while i < ArraySize(this.m_debugLines) {
+      body += "\n" + this.m_debugLines[i];
+      i += 1;
+    };
+    this.m_debugText.SetText(body);
   }
 }
 

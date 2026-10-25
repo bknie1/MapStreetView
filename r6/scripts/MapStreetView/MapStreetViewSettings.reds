@@ -114,7 +114,7 @@ public class MapStreetViewSettings {
 
   @runtimeProperty("ModSettings.mod", "Map Street View")
   @runtimeProperty("ModSettings.category", "Debug")
-  @runtimeProperty("ModSettings.displayName", "Debug log")
-  @runtimeProperty("ModSettings.description", "Writes camera details to r6/logs/redscript_rCURRENT.log. Leave off unless asked.")
+  @runtimeProperty("ModSettings.displayName", "Debug overlay")
+  @runtimeProperty("ModSettings.description", "Shows camera details on top of the map, for bug reports. Leave off unless asked.")
   public let debugLog: Bool = false;
 }
