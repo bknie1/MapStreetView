@@ -27,7 +27,7 @@ public class MapStreetViewSettings {
   @runtimeProperty("ModSettings.category", "Controls")
   @runtimeProperty("ModSettings.displayName", "Remember view between map visits")
   @runtimeProperty("ModSettings.description", "Reopen the map at the rotation and tilt you left it at.")
-  public let rememberView: Bool = true;
+  public let rememberView: Bool = false;
 
   @runtimeProperty("ModSettings.mod", "Map Street View")
   @runtimeProperty("ModSettings.category", "Controls")

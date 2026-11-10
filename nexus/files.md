@@ -1,14 +1,14 @@
-# Nexus file uploads for 3.0.0
+# Nexus file uploads for 3.0.1
 
-Upload each zip from `dist/` with these settings. Version for all four: `3.0.0`.
-Archive the old 2.1 file (move it to *Old versions*) once these are up.
+Upload each zip from `dist/` with these settings. Version for all four: `3.0.1`.
+Archive the previous files (move them to *Old versions*) once these are up.
 
 | Zip | File name on Nexus | Category | Description |
 |---|---|---|---|
-| `MapStreetView-3.0.0-Standard.zip` | Map Street View | Main | Rotate, tilt, and zoom the world map with mouse, controller, or keyboard. Zooming keeps your view. Requires redscript. |
-| `MapStreetView-3.0.0-Silent.zip` | Map Street View - Silent | Main | Same as Standard, with rotation sounds off. Install one main file only. |
-| `MapStreetView-3.0.0-InvertedTilt.zip` | Map Street View - Inverted Tilt | Main | Same as Standard, with tilt inverted for stick and mouse. Install one main file only. |
-| `MapStreetView-3.0.0-NoMouseDrag.zip` | Map Street View - No Mouse Drag | Main | Same as Standard, but right mouse stays vanilla. Rotate with the right stick or arrow keys. Install one main file only. |
+| `MapStreetView-3.0.1-Standard.zip` | Map Street View | Main | Rotate, tilt, and zoom the world map with mouse, controller, or keyboard. Zooming keeps your view. Requires redscript. |
+| `MapStreetView-3.0.1-Silent.zip` | Map Street View - Silent | Main | Same as Standard, with rotation sounds off. Install one main file only. |
+| `MapStreetView-3.0.1-InvertedTilt.zip` | Map Street View - Inverted Tilt | Main | Same as Standard, with tilt inverted for stick and mouse. Install one main file only. |
+| `MapStreetView-3.0.1-NoMouseDrag.zip` | Map Street View - No Mouse Drag | Main | Same as Standard, but right mouse stays vanilla. Rotate with the right stick or arrow keys. Install one main file only. |
 
 ## Page fields
 

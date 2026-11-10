@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.0.1
+
+- Fixed the map sometimes rotating on its own until the stick was touched again. If stick input goes quiet, rotation now stops.
+- Fixed right-clicks on map icons being delayed or swallowed. Clicking an icon tracks it right away again, and other mods that use that click (such as Shift-click to untrack) work again. Only a waypoint on empty map waits for release, so right-drag never leaves one behind.
+- "Remember view between map visits" is now off by default, so the map no longer turns by itself when you open it. Switch it on in the settings if you liked it.
+
 ## 3.0.0
 
 Rewritten for game version 2.5.

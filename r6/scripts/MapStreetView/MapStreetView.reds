@@ -100,6 +100,8 @@ public class MSVCamera extends IScriptable {
   // Stick and arrow key speeds, after deadzone and sensitivity.
   private let m_stickYaw: Float;
   private let m_stickPitch: Float;
+  private let m_stickYawTime: Float;
+  private let m_stickPitchTime: Float;
 
   // Where the camera is and where we want it. Yaw counts from how the map
   // opened; pitch counts from the current zoom level's preset tilt.
@@ -149,11 +151,13 @@ public class MSVCamera extends IScriptable {
 
   public final func SetStickYaw(raw: Float) -> Void {
     this.m_stickYaw = this.ShapeStick(raw, this.m_cfg.invertYaw);
+    this.m_stickYawTime = this.Now();
     this.Wake();
   }
 
   public final func SetStickPitch(raw: Float) -> Void {
     this.m_stickPitch = this.ShapeStick(raw, this.m_cfg.invertPitch);
+    this.m_stickPitchTime = this.Now();
     this.Wake();
   }
 
@@ -319,6 +323,17 @@ public class MSVCamera extends IScriptable {
     if this.m_holding && !this.m_holdDone && now - this.m_holdStart >= 0.60 {
       this.m_holdDone = true;
       this.ResetView();
+    };
+    // The game resends a held stick every frame. If it goes quiet, the
+    // "back to center" event got lost somewhere (map closed mid-turn, a
+    // popup took input), so stop rather than turn forever.
+    if this.m_stickYaw != 0.00 && now - this.m_stickYawTime > 0.15 {
+      this.m_stickYaw = 0.00;
+      this.Log("stick rotation went quiet, stopping");
+    };
+    if this.m_stickPitch != 0.00 && now - this.m_stickPitchTime > 0.15 {
+      this.m_stickPitch = 0.00;
+      this.Log("stick tilt went quiet, stopping");
     };
     // The stick drives directly and carries the goal along with it, so the
     // catch-up only ever closes a gap the player didn't make with the stick.
@@ -634,8 +649,11 @@ private final func HandlePressInput(e: ref<inkPointerEvent>) -> Void {
     // Right mouse arrives as two separate events, "rotate" and "set
     // waypoint". Hold the waypoint until release: if the mouse moved in
     // between it was a drag, otherwise set the waypoint then.
+    // Clicking a map icon tracks it right away, as in vanilla, so other mods
+    // that act on that click (Shift-click to untrack, say) still see it.
+    // Only a waypoint dropped on empty map waits for the release.
     isRotate = e.IsAction(n"world_map_menu_rotate_mouse");
-    isWaypoint = e.IsAction(n"world_map_menu_track_waypoint");
+    isWaypoint = e.IsAction(n"world_map_menu_track_waypoint") && !this.HasSelectedMappin();
     if isRotate || isWaypoint {
       if !this.m_msvRightDragging {
         this.m_msvRightDragged = false;
@@ -653,7 +671,9 @@ private final func HandlePressInput(e: ref<inkPointerEvent>) -> Void {
       // Right mouse is also bound to Back; this flag is how vanilla keeps the
       // map from closing on a right-click.
       this.m_pressedRMB = true;
-      return;
+      if !e.IsAction(n"world_map_menu_track_waypoint") || isWaypoint {
+        return;
+      };
     };
   };
   if IsDefined(this.m_msvCamera) && this.MSVSettings().holdToReset && e.IsAction(n"world_map_menu_jump_to_player") {
